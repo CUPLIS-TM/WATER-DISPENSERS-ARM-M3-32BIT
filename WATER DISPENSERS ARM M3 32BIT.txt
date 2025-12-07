@@ -1,16 +1,14 @@
 Configuration	WATER DISPENSERS ARM M3 32BIT
 STM32CubeMX 	6.15.0
-Date	12/02/2025
+Date	12/07/2025
 MCU	STM32F103C8Tx
 
 
 
 PERIPHERALS	MODES	FUNCTIONS	PINS
-RCC	Crystal/Ceramic Resonator	RCC_OSC_IN	PD0-OSC_IN
-RCC	Crystal/Ceramic Resonator	RCC_OSC_OUT	PD1-OSC_OUT
 SYS	Serial Wire	SYS_JTCK-SWCLK	PA14
 SYS	Serial Wire	SYS_JTMS-SWDIO	PA13
-SYS	SysTick	SYS_VS_Systick	VP_SYS_VS_Systick
+SYS	TIM4	SYS_VS_tim4	VP_SYS_VS_tim4
 
 
 
@@ -18,19 +16,15 @@ Pin Nb	PINs	FUNCTIONs	LABELs
 2	PC13-TAMPER-RTC	GPIO_Output	LED_PROGRAM_RUNNING
 3	PC14-OSC32_IN	GPIO_Output	LED_STATUS_WATER_GALLON
 4	PC15-OSC32_OUT	GPIO_Output	PUMP_WATER_GALLON
-5	PD0-OSC_IN	RCC_OSC_IN	
-6	PD1-OSC_OUT	RCC_OSC_OUT	
-10	PA0-WKUP	GPIO_Input	DOOR_SW
-11	PA1	GPIO_Input	WATER_LIMIT
-12	PA2	GPIO_Input	OVERFLOW_SENSOR
+10	PA0-WKUP	GPIO_EXTI0	DOOR_SW
+11	PA1	GPIO_EXTI1	WATER_LIMIT
+12	PA2	GPIO_EXTI2	OVERFLOW_SENSOR
 34	PA13	SYS_JTMS-SWDIO	
 37	PA14	SYS_JTCK-SWCLK	
 PERIPHERALS	MODES	FUNCTIONS	PINS
-RCC	Crystal/Ceramic Resonator	RCC_OSC_IN	PD0-OSC_IN
-RCC	Crystal/Ceramic Resonator	RCC_OSC_OUT	PD1-OSC_OUT
 SYS	Serial Wire	SYS_JTCK-SWCLK	PA14
 SYS	Serial Wire	SYS_JTMS-SWDIO	PA13
-SYS	SysTick	SYS_VS_Systick	VP_SYS_VS_Systick
+SYS	TIM4	SYS_VS_tim4	VP_SYS_VS_tim4
 
 
 
@@ -38,11 +32,9 @@ Pin Nb	PINs	FUNCTIONs	LABELs
 2	PC13-TAMPER-RTC	GPIO_Output	LED_PROGRAM_RUNNING
 3	PC14-OSC32_IN	GPIO_Output	LED_STATUS_WATER_GALLON
 4	PC15-OSC32_OUT	GPIO_Output	PUMP_WATER_GALLON
-5	PD0-OSC_IN	RCC_OSC_IN	
-6	PD1-OSC_OUT	RCC_OSC_OUT	
-10	PA0-WKUP	GPIO_Input	DOOR_SW
-11	PA1	GPIO_Input	WATER_LIMIT
-12	PA2	GPIO_Input	OVERFLOW_SENSOR
+10	PA0-WKUP	GPIO_EXTI0	DOOR_SW
+11	PA1	GPIO_EXTI1	WATER_LIMIT
+12	PA2	GPIO_EXTI2	OVERFLOW_SENSOR
 34	PA13	SYS_JTMS-SWDIO	
 37	PA14	SYS_JTCK-SWCLK	
 
@@ -59,10 +51,10 @@ Firmware Package Name and Version : STM32Cube FW_F1 V1.8.6
 
 Code Generation Settings : 
 STM32Cube MCU packages and embedded software packs : Copy only the necessary library files
-Generate peripheral initialization as a pair of '.c/.h' files per peripheral : No
+Generate peripheral initialization as a pair of '.c/.h' files per peripheral : Yes
 Backup previously generated files when re-generating : No
 Delete previously generated files when not re-generated : Yes
-Set all free pins as analog (to optimize the power consumption) : No
+Set all free pins as analog (to optimize the power consumption) : Yes
 
 
 Toolchains Settings : 

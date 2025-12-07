@@ -43,8 +43,8 @@ extern "C" {
 
 /* DOOR SWITCH Configuration ------------------------------------------------*/
 // Choose door switch type and logic
-#define DOOR_SWITCH_TYPE_NO     // Normally Open switch (door closed = switch closes)
-// #define DOOR_SWITCH_TYPE_NC  // Normally Closed switch (door closed = switch opens)
+//#define DOOR_SWITCH_TYPE_NO     // Normally Open switch (door closed = switch closes)
+#define DOOR_SWITCH_TYPE_NC  // Normally Closed switch (door closed = switch opens)
 
 #define DOOR_SWITCH_ACTIVE_LOW  // Switch reads LOW when triggered
 // #define DOOR_SWITCH_ACTIVE_HIGH // Switch reads HIGH when triggered
