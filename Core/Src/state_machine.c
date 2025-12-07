@@ -24,6 +24,174 @@ static StateMachine_t sm;  // State machine context
 static uint32_t pumpOnTimeWindow = 0;
 static uint32_t windowStartTime = 0;
 
+/* Exported functions --------------------------------------------------------*/
+
+/**
+  * @brief  Initialize state machine
+  * @param  None
+  * @retval None
+  */
+void StateMachine_Init(void)
+{
+  sm.currentState = STATE_IDLE;
+  sm.previousState = STATE_IDLE;
+  sm.stateChangeTime = 0;
+  sm.pumpStartTime = 0;
+  sm.errorCode = ERROR_NONE;
+  sm.stats.pumpCycleCount = 0;
+  sm.stats.totalPumpRunTime = 0;
+  sm.stats.errorCount = 0;
+  
+  // Initial LED state
+  StateMachine_UpdateLEDs();
+}
+
+/**
+  * @brief  Get current system state
+  * @param  None
+  * @retval SystemState_t Current state
+  */
+SystemState_t StateMachine_GetState(void)
+{
+  return sm.currentState;
+}
+
+/**
+  * @brief  Get current error code
+  * @param  None
+  * @retval uint8_t Error code
+  */
+uint8_t StateMachine_GetErrorCode(void)
+{
+  return sm.errorCode;
+}
+
+/**
+  * @brief  Update LED indicators based on current state
+  * @param  None
+  * @retval None
+  */
+void StateMachine_UpdateLEDs(void)
+{
+  uint32_t currentTime = HAL_GetTick();
+  
+  // Handle blinking logic
+  if((currentTime - sm.lastBlinkTime) >= 250) { // Default fast blink base
+    sm.lastBlinkTime = currentTime;
+    sm.ledBlinkState = !sm.ledBlinkState;
+  }
+  
+  switch(sm.currentState) {
+    case STATE_IDLE:
+      PROGRAM_LED_ON();
+      STATUS_LED_OFF();
+      break;
+      
+    case STATE_DOOR_OPEN:
+      // Fast blink Program LED
+      if(sm.ledBlinkState) PROGRAM_LED_ON(); else PROGRAM_LED_OFF();
+      STATUS_LED_OFF();
+      break;
+      
+    case STATE_WAIT_SETTLE:
+      PROGRAM_LED_ON();
+      // Slow blink Status LED (500ms)
+      if((currentTime / 500) % 2) STATUS_LED_ON(); else STATUS_LED_OFF();
+      break;
+      
+    case STATE_FILLING:
+      PROGRAM_LED_ON();
+      // Fast blink Status LED
+      if(sm.ledBlinkState) STATUS_LED_ON(); else STATUS_LED_OFF();
+      break;
+      
+    case STATE_FULL:
+      PROGRAM_LED_ON();
+      STATUS_LED_ON();
+      break;
+      
+    case STATE_ERROR:
+      // Alternating blink
+      if(sm.ledBlinkState) {
+        PROGRAM_LED_ON();
+        STATUS_LED_OFF();
+      } else {
+        PROGRAM_LED_OFF();
+        STATUS_LED_ON();
+      }
+      break;
+      
+    case STATE_COOLDOWN:
+      PROGRAM_LED_ON();
+      // Slow blink Status LED
+      if((currentTime / 500) % 2) STATUS_LED_ON(); else STATUS_LED_OFF();
+      break;
+  }
+}
+
+/* Private function prototypes -----------------------------------------------*/
+static void EnterState(SystemState_t newState);
+static uint8_t CheckSafetyConditions(void);
+static uint8_t CheckPumpDutyCycle(void);
+static void UpdatePumpStatistics(uint32_t runtime);
+
+// Handlers
+static void HandleIdleState(void);
+static void HandleDoorOpenState(void);
+static void HandleWaitSettleState(void);
+static void HandleFillingState(void);
+static void HandleFullState(void);
+static void HandleErrorState(void);
+static void HandleCooldownState(void);
+
+// ... (Rest of the file content, ensuring unused functions are removed or used)
+
+// NOTE: The previous error showed these were defined but not used.
+// This means they are NOT called in StateMachine_Process.
+// I need to ensure StateMachine_Process actually calls them.
+
+/**
+  * @brief  Process state machine (call in main loop)
+  * @param  None
+  * @retval None
+  */
+void StateMachine_Process(void)
+{
+  // Check global safety conditions first
+  if(!CheckSafetyConditions()) {
+    return;
+  }
+
+  switch (sm.currentState)
+  {
+    case STATE_IDLE:
+      HandleIdleState();
+      break;
+    case STATE_DOOR_OPEN:
+      HandleDoorOpenState();
+      break;
+    case STATE_WAIT_SETTLE:
+      HandleWaitSettleState();
+      break;
+    case STATE_FILLING:
+      HandleFillingState();
+      break;
+    case STATE_FULL:
+      HandleFullState();
+      break;
+    case STATE_ERROR:
+      HandleErrorState();
+      break;
+    case STATE_COOLDOWN:
+      HandleCooldownState();
+      break;
+    default:
+      // Should not happen, reset to IDLE
+      EnterState(STATE_IDLE);
+      break;
+  }
+}
+
 
 /**
   * @brief  Get system statistics

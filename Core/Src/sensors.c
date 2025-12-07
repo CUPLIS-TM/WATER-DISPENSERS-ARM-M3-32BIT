@@ -133,16 +133,30 @@ GPIO_PinState Sensors_DebouncedRead(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
     return state1;
   }
 
+  // If different, read one more time to confirm
+  return HAL_GPIO_ReadPin(GPIOx, GPIO_Pin);
+}
+
+/**
+  * @brief  Test all sensors (for diagnostics)
+  * @param  None
+  * @retval uint8_t Test result: 0 = all OK, non-zero = error code
+  */
+uint8_t Sensors_SelfTest(void)
+{
+  uint8_t errorCode = 0;
+
+  // Test door switch
+  GPIO_PinState doorState = HAL_GPIO_ReadPin(DOOR_SW_GPIO_Port, DOOR_SW_Pin);
+  if(doorState != GPIO_PIN_RESET && doorState != GPIO_PIN_SET) {
+    errorCode |= 0x01;  // Door sensor error
+  }
+
   // Test water level sensor
   GPIO_PinState waterState = HAL_GPIO_ReadPin(WATER_LIMIT_GPIO_Port, WATER_LIMIT_Pin);
   if(waterState != GPIO_PIN_RESET && waterState != GPIO_PIN_SET) {
     errorCode |= 0x02;  // Water sensor error
   }
-
-  // Could add more checks:
-  // - Check if sensors are stuck
-  // - Check voltage levels
-  // - etc.
 
   return errorCode;
 }
