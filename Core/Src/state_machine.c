@@ -157,9 +157,19 @@ static void HandleCooldownState(void);
   */
 void StateMachine_Process(void)
 {
-  // Check global safety conditions first
-  if(!CheckSafetyConditions()) {
-    return;
+  // Global safety check removed to prevent blocking state handlers.
+  // Safety is handled by individual state handlers and the Critical Safety Override below.
+
+  // CRITICAL SAFETY OVERRIDE
+  // Priority 1: Prevent Overflow
+  // If tank is full, FORCE PUMP OFF immediately, regardless of state.
+  if(Sensors_IsTankFull()) {
+     PUMP_OFF();
+     
+     // If we were filling, transition state to record it properly
+     if(sm.currentState == STATE_FILLING) {
+         EnterState(STATE_FULL);
+     }
   }
 
   switch (sm.currentState)
@@ -550,6 +560,13 @@ static uint8_t CheckPumpDutyCycle(void)
   static uint32_t lastCheck = 0;
   
   if (lastCheck == 0) lastCheck = currentTime;
+  
+  // Fix: If lastCheck is older than current pump start, we missed the gap.
+  // Resync to pumpStartTime to avoid counting OFF time as ON time.
+  if (lastCheck < sm.pumpStartTime) {
+    lastCheck = sm.pumpStartTime;
+  }
+
   uint32_t delta = currentTime - lastCheck;
   lastCheck = currentTime;
   

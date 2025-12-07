@@ -128,7 +128,7 @@ extern "C" {
    ========================================================================== */
 
 /* Pump Protection Parameters -----------------------------------------------*/
-#define MAX_PUMP_DUTY_CYCLE     30      // Max 30% duty cycle
+#define MAX_PUMP_DUTY_CYCLE     100     // Max 100% duty cycle (No forced cooldown)
 #define DUTY_CYCLE_WINDOW       600000  // Over 10 minute window (ms)
 #define PUMP_OVERHEAT_COOLDOWN  300000  // 5 min forced cooldown (ms)
 

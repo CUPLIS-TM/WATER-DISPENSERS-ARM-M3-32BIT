@@ -172,8 +172,8 @@ int main(void)
 
     uint32_t currentTime = HAL_GetTick();
 
-    // IWDG refresh every 3 seconds (non-blocking)
-    if((currentTime - lastIWDGRefresh) >= 3000) {
+    // IWDG refresh every 2 seconds (safe margin for ~3.2s timeout)
+    if((currentTime - lastIWDGRefresh) >= 2000) {
       lastIWDGRefresh = currentTime;
       HAL_IWDG_Refresh(&hiwdg);
     }
