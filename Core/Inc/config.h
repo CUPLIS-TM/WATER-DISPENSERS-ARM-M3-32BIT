@@ -127,6 +127,16 @@ extern "C" {
    Do not modify unless you know what you're doing
    ========================================================================== */
 
+/* Pump Protection Parameters -----------------------------------------------*/
+#define MAX_PUMP_DUTY_CYCLE     30      // Max 30% duty cycle
+#define DUTY_CYCLE_WINDOW       600000  // Over 10 minute window (ms)
+#define PUMP_OVERHEAT_COOLDOWN  300000  // 5 min forced cooldown (ms)
+
+/* Optional Features (Enable if hardware supported) -------------------------*/
+#define ENABLE_BATTERY_MONITOR  0       // Requires ADC1
+#define ENABLE_USAGE_STATS      0       // Requires Flash storage
+#define ENABLE_REMOTE_MONITOR   0       // Requires UART1
+
 /* Rapid Cycling Protection -------------------------------------------------*/
 #define MAX_RAPID_CYCLES        10      // Maximum cycles before error check
 #define MIN_AVG_CYCLE_TIME      30000   // Minimum average cycle time: 30 seconds

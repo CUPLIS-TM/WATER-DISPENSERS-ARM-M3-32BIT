@@ -43,6 +43,11 @@ typedef struct {
   uint32_t totalPumpRunTime;    // Total accumulated pump runtime (ms)
   uint32_t pumpCycleCount;      // Number of pump cycles since boot
   uint32_t lastFillDuration;    // Duration of last fill cycle (ms)
+  uint32_t totalSystemUptime;   // Total time powered on
+  uint32_t pumpAverageRuntime;  // Average per cycle
+  uint32_t longestPumpRun;      // Longest single run
+  uint32_t shortestPumpRun;     // Shortest single run
+  uint8_t  pumpHealthScore;     // 0-100 health metric
   uint32_t errorCount;          // Total error count
   uint8_t  lastErrorCode;       // Last error code
 } SystemStats_t;

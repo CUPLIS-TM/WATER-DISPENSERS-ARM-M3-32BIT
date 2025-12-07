@@ -51,7 +51,12 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+// Debounce timing
+static uint32_t lastDoorInterruptTime = 0;
+static uint32_t lastWaterInterruptTime = 0;
+static uint32_t lastOverflowInterruptTime = 0;
 
+#define DEBOUNCE_TIME_MS 50  // 50ms debounce
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -205,7 +210,14 @@ void SysTick_Handler(void)
 void EXTI0_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI0_IRQn 0 */
-
+  uint32_t currentTime = HAL_GetTick();
+  
+  // Debounce check
+  if((currentTime - lastDoorInterruptTime) < DEBOUNCE_TIME_MS) {
+    __HAL_GPIO_EXTI_CLEAR_IT(DOOR_SW_Pin);
+    return;  // Ignore this interrupt
+  }
+  lastDoorInterruptTime = currentTime;
   /* USER CODE END EXTI0_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(DOOR_SW_Pin);
   /* USER CODE BEGIN EXTI0_IRQn 1 */
@@ -219,7 +231,14 @@ void EXTI0_IRQHandler(void)
 void EXTI1_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI1_IRQn 0 */
-
+  uint32_t currentTime = HAL_GetTick();
+  
+  // Debounce check
+  if((currentTime - lastWaterInterruptTime) < DEBOUNCE_TIME_MS) {
+    __HAL_GPIO_EXTI_CLEAR_IT(WATER_LIMIT_Pin);
+    return;  // Ignore this interrupt
+  }
+  lastWaterInterruptTime = currentTime;
   /* USER CODE END EXTI1_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(WATER_LIMIT_Pin);
   /* USER CODE BEGIN EXTI1_IRQn 1 */
@@ -233,7 +252,14 @@ void EXTI1_IRQHandler(void)
 void EXTI2_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI2_IRQn 0 */
-
+  uint32_t currentTime = HAL_GetTick();
+  
+  // Debounce check
+  if((currentTime - lastOverflowInterruptTime) < DEBOUNCE_TIME_MS) {
+    __HAL_GPIO_EXTI_CLEAR_IT(OVERFLOW_SENSOR_Pin);
+    return;  // Ignore this interrupt
+  }
+  lastOverflowInterruptTime = currentTime;
   /* USER CODE END EXTI2_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(OVERFLOW_SENSOR_Pin);
   /* USER CODE BEGIN EXTI2_IRQn 1 */

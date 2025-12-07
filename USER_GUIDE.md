@@ -108,6 +108,18 @@ All system settings are located in [config.h](file:///d:/tes/KON/Core/Inc/config
 
 Increase if sensors are triggering falsely (noisy environment).
 
+### Pump Protection (New in v2.1)
+
+```c
+#define MAX_PUMP_DUTY_CYCLE     30      // Max 30% duty cycle over 10 mins
+#define PUMP_OVERHEAT_COOLDOWN  300000  // 5 min forced cooldown
+```
+
+**How it works:**
+- System tracks pump usage over a 10-minute window.
+- If pump runs >30% of the time (3 mins in 10 mins), it forces a cooldown.
+- Prevents motor overheating during heavy usage.
+
 ### LED Blink Rates
 
 ```c

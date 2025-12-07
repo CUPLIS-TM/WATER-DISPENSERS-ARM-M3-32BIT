@@ -11,6 +11,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "state_machine.h"
 #include "sensors.h"
+#include "error_log.h"
 
 /* Private typedef -----------------------------------------------------------*/
 
@@ -20,192 +21,9 @@
 
 /* Private variables ---------------------------------------------------------*/
 static StateMachine_t sm;  // State machine context
+static uint32_t pumpOnTimeWindow = 0;
+static uint32_t windowStartTime = 0;
 
-/* Private function prototypes -----------------------------------------------*/
-static void EnterState(SystemState_t newState);
-static uint8_t CheckSafetyConditions(void);
-static void HandleIdleState(void);
-static void HandleDoorOpenState(void);
-static void HandleWaitSettleState(void);
-static void HandleFillingState(void);
-static void HandleFullState(void);
-static void HandleErrorState(void);
-static void HandleCooldownState(void);
-
-/* Exported functions --------------------------------------------------------*/
-
-/**
-  * @brief  Initialize state machine
-  * @param  None
-  * @retval None
-  */
-void StateMachine_Init(void)
-{
-  // Initialize all variables
-  sm.currentState = STATE_IDLE;
-  sm.previousState = STATE_IDLE;
-  sm.stateChangeTime = 0;
-  sm.pumpStartTime = 0;
-  sm.pumpStopTime = 0;
-  sm.lastBlinkTime = 0;
-  sm.ledBlinkState = 0;
-  sm.errorCode = ERROR_NONE;
-
-  // Initialize statistics
-  sm.stats.totalPumpRunTime = 0;
-  sm.stats.pumpCycleCount = 0;
-  sm.stats.lastFillDuration = 0;
-  sm.stats.errorCount = 0;
-  sm.stats.lastErrorCode = ERROR_NONE;
-
-  // Ensure pump is off
-  PUMP_OFF();
-
-  // Determine initial state based on inputs
-  if(!Sensors_IsDoorClosed()) {
-    EnterState(STATE_DOOR_OPEN);
-  } else if(Sensors_IsTankFull()) {
-    EnterState(STATE_FULL);
-  } else {
-    EnterState(STATE_IDLE);
-  }
-}
-
-/**
-  * @brief  Process state machine (call in main loop)
-  * @param  None
-  * @retval None
-  */
-void StateMachine_Process(void)
-{
-  switch(sm.currentState)
-  {
-    case STATE_IDLE:
-      HandleIdleState();
-      break;
-
-    case STATE_DOOR_OPEN:
-      HandleDoorOpenState();
-      break;
-
-    case STATE_WAIT_SETTLE:
-      HandleWaitSettleState();
-      break;
-
-    case STATE_FILLING:
-      HandleFillingState();
-      break;
-
-    case STATE_FULL:
-      HandleFullState();
-      break;
-
-    case STATE_ERROR:
-      HandleErrorState();
-      break;
-
-    case STATE_COOLDOWN:
-      HandleCooldownState();
-      break;
-
-    default:
-      EnterState(STATE_IDLE);
-      break;
-  }
-}
-
-/**
-  * @brief  Update LED indicators based on current state
-  * @param  None
-  * @retval None
-  */
-void StateMachine_UpdateLEDs(void)
-{
-  uint32_t currentTime = HAL_GetTick();
-
-  switch(sm.currentState)
-  {
-    case STATE_IDLE:
-      // Program LED: ON solid, Water LED: OFF
-      PROGRAM_LED_ON();
-      STATUS_LED_OFF();
-      break;
-
-    case STATE_DOOR_OPEN:
-      // Program LED: Fast blink (warning), Water LED: OFF
-      if((currentTime - sm.lastBlinkTime) > LED_BLINK_FAST) {
-        PROGRAM_LED_TOGGLE();
-        sm.lastBlinkTime = currentTime;
-      }
-      STATUS_LED_OFF();
-      break;
-
-    case STATE_WAIT_SETTLE:
-      // Program LED: ON solid, Water LED: Slow blink (preparing)
-      PROGRAM_LED_ON();
-      if((currentTime - sm.lastBlinkTime) > LED_BLINK_SLOW) {
-        STATUS_LED_TOGGLE();
-        sm.lastBlinkTime = currentTime;
-      }
-      break;
-
-    case STATE_FILLING:
-      // Program LED: ON solid, Water LED: Fast blink (actively filling)
-      PROGRAM_LED_ON();
-      if((currentTime - sm.lastBlinkTime) > LED_BLINK_FAST) {
-        STATUS_LED_TOGGLE();
-        sm.lastBlinkTime = currentTime;
-      }
-      break;
-
-    case STATE_FULL:
-      // Both LEDs: ON solid (tank full and ready)
-      PROGRAM_LED_ON();
-      STATUS_LED_ON();
-      break;
-
-    case STATE_COOLDOWN:
-      // Program LED: ON solid, Water LED: Slow blink (cooldown)
-      PROGRAM_LED_ON();
-      if((currentTime - sm.lastBlinkTime) > LED_BLINK_SLOW) {
-        STATUS_LED_TOGGLE();
-        sm.lastBlinkTime = currentTime;
-      }
-      break;
-
-    case STATE_ERROR:
-      // Both LEDs: Fast blink alternating (error indication)
-      if((currentTime - sm.lastBlinkTime) > LED_BLINK_ERROR) {
-        PROGRAM_LED_TOGGLE();
-        STATUS_LED_TOGGLE();
-        sm.lastBlinkTime = currentTime;
-      }
-      break;
-
-    default:
-      break;
-  }
-}
-
-/**
-  * @brief  Get current system state
-  * @param  None
-  * @retval SystemState_t Current state
-  */
-SystemState_t StateMachine_GetState(void)
-{
-  return sm.currentState;
-}
-
-/**
-  * @brief  Get current error code
-  * @param  None
-  * @retval uint8_t Error code (0 = no error)
-  */
-uint8_t StateMachine_GetErrorCode(void)
-{
-  return sm.errorCode;
-}
 
 /**
   * @brief  Get system statistics
@@ -264,6 +82,11 @@ static void EnterState(SystemState_t newState)
   sm.stateChangeTime = HAL_GetTick();
   sm.ledBlinkState = 0;
   sm.lastBlinkTime = sm.stateChangeTime;
+  
+  // Log error if entering error state (Task 7)
+  if(newState == STATE_ERROR) {
+    ErrorLog_Add(sm.errorCode, sm.previousState, sm.stats.pumpCycleCount);
+  }
 }
 
 /**
@@ -400,6 +223,17 @@ static void HandleFillingState(void)
   uint32_t currentTime = HAL_GetTick();
   uint32_t pumpRunTime = currentTime - sm.pumpStartTime;
 
+  // Check duty cycle
+  if(!CheckPumpDutyCycle()) {
+    PUMP_OFF();
+    sm.pumpStopTime = currentTime;
+    UpdatePumpStatistics(pumpRunTime);
+    sm.stats.errorCount++;
+    // Force cooldown
+    EnterState(STATE_COOLDOWN); 
+    return;
+  }
+
   // Safety check: overflow detected
   if(Sensors_IsOverflow()) {
     PUMP_OFF();
@@ -427,8 +261,7 @@ static void HandleFillingState(void)
   if(Sensors_IsTankFull()) {
     PUMP_OFF();
     sm.pumpStopTime = currentTime;
-    sm.stats.totalPumpRunTime += pumpRunTime;
-    sm.stats.lastFillDuration = pumpRunTime;
+    UpdatePumpStatistics(pumpRunTime);
     EnterState(STATE_FULL);
     return;
   }
@@ -537,4 +370,89 @@ static void HandleCooldownState(void)
       EnterState(STATE_IDLE);
     }
   }
+}
+
+/**
+  * @brief  Check pump duty cycle
+  * @retval 1 if OK, 0 if over limit
+  */
+static uint8_t CheckPumpDutyCycle(void)
+{
+  uint32_t currentTime = HAL_GetTick();
+  static uint32_t lastCheck = 0;
+  
+  if (lastCheck == 0) lastCheck = currentTime;
+  uint32_t delta = currentTime - lastCheck;
+  lastCheck = currentTime;
+  
+  // Start new window if needed
+  if(windowStartTime == 0 || (currentTime - windowStartTime) > DUTY_CYCLE_WINDOW) {
+    windowStartTime = currentTime;
+    pumpOnTimeWindow = 0;
+  }
+  
+  pumpOnTimeWindow += delta;
+  
+  uint32_t windowDuration = currentTime - windowStartTime;
+  if(windowDuration < 1000) return 1; // Too short to judge
+  
+  uint32_t dutyCycle = (pumpOnTimeWindow * 100) / windowDuration;
+  
+  if(dutyCycle > MAX_PUMP_DUTY_CYCLE) {
+    return 0;
+  }
+  
+  return 1;
+}
+
+/**
+  * @brief  Calculate pump health score
+  * @retval uint8_t 0-100 (100 = perfect health)
+  */
+static uint8_t CalculatePumpHealth(void)
+{
+  uint8_t score = 100;
+  
+  // Deduct for errors
+  if(sm.stats.errorCount > 10) score -= 20;
+  else if(sm.stats.errorCount > 5) score -= 10;
+  
+  // Deduct for excessive runtime
+  if(sm.stats.pumpAverageRuntime > (PUMP_NORMAL_FILL_TIME * 1.5)) {
+    score -= 15;
+  }
+  
+  // Deduct for rapid cycling
+  if(sm.stats.pumpCycleCount > 1000) {
+    score -= 10;
+  }
+  
+  return score;
+}
+
+/**
+  * @brief  Update statistics after pump stop
+  */
+static void UpdatePumpStatistics(uint32_t runtime)
+{
+  sm.stats.totalPumpRunTime += runtime;
+  sm.stats.lastFillDuration = runtime;
+  
+  // Update longest/shortest
+  if(runtime > sm.stats.longestPumpRun) {
+    sm.stats.longestPumpRun = runtime;
+  }
+  if(sm.stats.shortestPumpRun == 0 || 
+     runtime < sm.stats.shortestPumpRun) {
+    sm.stats.shortestPumpRun = runtime;
+  }
+  
+  // Calculate average
+  if(sm.stats.pumpCycleCount > 0) {
+    sm.stats.pumpAverageRuntime = 
+      sm.stats.totalPumpRunTime / sm.stats.pumpCycleCount;
+  }
+  
+  // Update health score
+  sm.stats.pumpHealthScore = CalculatePumpHealth();
 }

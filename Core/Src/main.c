@@ -27,6 +27,8 @@
 #include "config.h"
 #include "state_machine.h"
 #include "sensors.h"
+#include "error_log.h"
+#include "config_storage.h"
 
 /* USER CODE END Includes */
 
@@ -59,25 +61,45 @@ static void System_Startup(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static volatile uint8_t shutdownRequested = 0;
 
+/**
+  * @brief  Initiate graceful shutdown
+  */
+void System_RequestShutdown(void)
+{
+  shutdownRequested = 1;
+}
+
+/**
+  * @brief  Perform graceful shutdown
+  */
+static void System_Shutdown(void)
+{
+  // Stop pump immediately
+  PUMP_OFF();
+  
+  // Indicate shutdown with LED pattern
+  for(int i = 0; i < 3; i++) {
+    PROGRAM_LED_ON();
+    STATUS_LED_ON();
+    HAL_Delay(200);
+    PROGRAM_LED_OFF();
+    STATUS_LED_OFF();
+    HAL_Delay(200);
+  }
+  
+  // Turn off all peripherals
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_All, GPIO_PIN_RESET);
+  
+  // Enter low power mode or infinite loop
+  while(1) {
+    __WFI();  // Wait for interrupt (power off)
+  }
+}
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
-int main(void)
-{
-
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
-
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
@@ -104,16 +126,63 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  
+  // Non-blocking loop variables
+  uint32_t lastLoopTime = 0;
+  uint32_t lastIWDGRefresh = 0;
+  uint32_t loopInterval = 10; // Default 10ms
+  
   while (1)
   {
-	  // Process state machine
-	 StateMachine_Process();
+    // Check for shutdown request (Task 9)
+    if(shutdownRequested) {
+      System_Shutdown();
+    }
 
-	 // Update LED indicators
-	 StateMachine_UpdateLEDs();
+    // Diagnostic Mode Trigger (Task 10)
+    // Check if door held open for 10 seconds
+    static uint32_t doorOpenStartTime = 0;
 
-	 // Main loop delay (10ms)
-	 HAL_Delay(10);
+    if(!Sensors_IsDoorClosed()) {
+      if(doorOpenStartTime == 0) {
+        doorOpenStartTime = HAL_GetTick();
+      } else if((HAL_GetTick() - doorOpenStartTime) > 10000) {
+        // Enter diagnostic mode
+        System_Diagnostics();
+        doorOpenStartTime = 0; // Reset after running
+      }
+    } else {
+      doorOpenStartTime = 0;
+    }
+
+    uint32_t currentTime = HAL_GetTick();
+
+    // IWDG refresh every 3 seconds (non-blocking)
+    if((currentTime - lastIWDGRefresh) >= 3000) {
+      lastIWDGRefresh = currentTime;
+      HAL_IWDG_Refresh(&hiwdg);
+    }
+
+    // Non-blocking loop timing
+    if((currentTime - lastLoopTime) >= loopInterval) {
+      lastLoopTime = currentTime;
+
+      // Process state machine
+      StateMachine_Process();
+
+      // Update LED indicators
+      StateMachine_UpdateLEDs();
+      
+      // Adaptive rate based on state for power efficiency
+      SystemState_t state = StateMachine_GetState();
+      if(state == STATE_FILLING) {
+        loopInterval = 10; // Fast response needed
+      } else if(state == STATE_DOOR_OPEN || state == STATE_ERROR) {
+        loopInterval = 20; // Medium response
+      } else {
+        loopInterval = 50; // Slow response (IDLE/FULL) - saves CPU
+      }
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -173,6 +242,23 @@ static void System_Startup(void)
 
   // Power-on stabilization delay
   HAL_Delay(500);
+  
+  // Self-test sensors (Task 8)
+  uint8_t sensorTest = Sensors_SelfTest();
+  
+  if(sensorTest != 0) {
+    // Sensor test failed - indicate with LED pattern
+    for(int i = 0; i < 10; i++) {
+      PROGRAM_LED_ON();
+      STATUS_LED_OFF();
+      HAL_Delay(100);
+      PROGRAM_LED_OFF();
+      STATUS_LED_ON();
+      HAL_Delay(100);
+    }
+    STATUS_LED_OFF();
+    // Continue anyway, but user is warned
+  }
 
   // Startup blink sequence (3x fast blink = system starting)
   for(int i = 0; i < 3; i++) {
@@ -186,6 +272,55 @@ static void System_Startup(void)
 
   HAL_Delay(500);
 }
+/**
+  * @brief  Display system diagnostics via LED
+  * @note   Hold door open for 10 seconds to trigger
+  */
+static void System_Diagnostics(void)
+{
+  // Pattern 1: Clock speed indication
+  // Fast blink = correct speed
+  for(int i = 0; i < 8; i++) {
+    PROGRAM_LED_TOGGLE();
+    HAL_Delay(100);
+  }
+  HAL_Delay(500);
+  
+  // Pattern 2: Sensor status
+  if(Sensors_IsDoorClosed()) {
+    STATUS_LED_ON();
+    HAL_Delay(500);
+    STATUS_LED_OFF();
+  }
+  HAL_Delay(500);
+  
+  if(Sensors_IsTankFull()) {
+    STATUS_LED_ON();
+    HAL_Delay(500);
+    STATUS_LED_OFF();
+  }
+  HAL_Delay(500);
+  
+  // Pattern 3: Error count
+  uint8_t errorCount = StateMachine_GetStats()->errorCount;
+  for(int i = 0; i < errorCount && i < 10; i++) {
+    PROGRAM_LED_ON();
+    HAL_Delay(200);
+    PROGRAM_LED_OFF();
+    HAL_Delay(200);
+  }
+  
+  // Pattern 4: Pump cycle count (tens)
+  uint32_t cycles = StateMachine_GetStats()->pumpCycleCount;
+  uint8_t tens = (cycles / 10) % 10;
+  for(int i = 0; i < tens; i++) {
+    STATUS_LED_ON();
+    HAL_Delay(200);
+    STATUS_LED_OFF();
+    HAL_Delay(200);
+  }
+}
+
 /* USER CODE END 4 */
 
 /**
